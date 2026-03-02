@@ -1,0 +1,780 @@
+/* =============================================================
+   styles.css — Intention Keeper (Front End, Stubbed)
+   =============================================================
+   PURPOSE:
+   Controls all visual layout, theming, and animation for the
+   single-page Intention Keeper application.
+
+   HOW IT FITS:
+   This file is linked in index.html and applies globally.
+   No styles are injected by JavaScript — all dynamic visual
+   changes are handled by app.js adding/removing CSS classes
+   or toggling inline display properties.
+
+   STRUCTURE:
+   1. Reset & base body
+   2. Container, header, main grid
+   3. Section cards (frosted glass style)
+   4. Input, word counter, buttons
+   5. Feedback message color variants
+   6. Mandala canvas and hash display
+   7. Mobile responsive breakpoints
+   8. Meditation timer styles
+   9. Session complete screen
+   10. My Intentions section
+   11. Scroll wheel picker
+   12. Sacred / Cosmic style toggle
+   ============================================================= */
+
+
+/* ─────────────────────────────────────────────────────────────
+   1. RESET & BASE BODY
+   Eliminates default browser spacing. border-box sizing ensures
+   padding never causes unexpected overflow on any element.
+   ───────────────────────────────────────────────────────────── */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Dark cosmic background gradient fills the full viewport.
+   Padding gives breathing room on small screens. */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 15px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   2. CONTAINER, HEADER, MAIN GRID
+   Centered single-column layout. max-width prevents
+   over-stretching on wide screens.
+   ───────────────────────────────────────────────────────────── */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px 0;
+}
+
+/* Gold glow — color chosen to evoke warmth and consciousness */
+h1 {
+    font-size: 2.5em;
+    color: #f39c12;
+    text-shadow: 0 0 20px rgba(243, 156, 18, 0.5);
+    margin-bottom: 10px;
+}
+
+/* Taglines de-emphasized so they don't compete with h1 */
+.tagline {
+    color: #95a5a6;
+    font-style: italic;
+}
+
+.tagline-sub {
+    color: #95a5a6;
+    font-size: 0.85em;
+    margin-top: 5px;
+}
+
+/* Stacked single-column grid for all screen sizes */
+main {
+    display: grid;
+    gap: 25px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   3. SECTION CARDS
+   Frosted glass aesthetic applied to every section uniformly.
+   backdrop-filter adds depth on supported browsers.
+   Gold border ties all cards to the same color language as h1.
+   ───────────────────────────────────────────────────────────── */
+section {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+}
+
+/* Gold headings consistent across all cards */
+h2, h3 {
+    color: #f39c12;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+/* Instructional text — smaller and italic so it reads as guidance, not content */
+.instruction {
+    color: #95a5a6;
+    font-size: 0.9em;
+    font-style: italic;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   4. INPUT, WORD COUNTER, BUTTONS
+   ───────────────────────────────────────────────────────────── */
+
+/* Full-width textarea. resize:vertical only — horizontal resize
+   would break the layout on narrow screens. */
+.input-section textarea {
+    width: 100%;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(243, 156, 18, 0.5);
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 1em;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.input-section textarea:focus {
+    outline: none;
+    border-color: #f39c12;
+    box-shadow: 0 0 15px rgba(243, 156, 18, 0.3);
+}
+
+/* Word counter sits flush right below textarea.
+   app.js switches #wordCount color to red when limit is exceeded. */
+.word-counter {
+    text-align: right;
+    font-size: 0.9em;
+    color: #95a5a6;
+    margin-top: 5px;
+    margin-bottom: 10px;
+}
+
+.word-counter #wordCount {
+    font-weight: bold;
+    color: #f39c12;
+}
+
+/* Primary CTA — full width, gold gradient, lifts on hover to signal interactivity */
+.primary-btn {
+    width: 100%;
+    padding: 14px;
+    margin-top: 15px;
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.primary-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(243, 156, 18, 0.4);
+}
+
+.primary-btn:active {
+    transform: translateY(0);
+}
+
+/* Disabled state — opacity signals unavailability without hiding the button */
+.primary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Secondary button — outlined gold, less prominent than primary.
+   Used for actions that are optional or supplementary. */
+.secondary-btn {
+    padding: 12px 20px;
+    margin-top: 10px;
+    background: rgba(243, 156, 18, 0.2);
+    border: 2px solid rgba(243, 156, 18, 0.5);
+    border-radius: 8px;
+    color: #f39c12;
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.secondary-btn:hover:not(:disabled) {
+    background: rgba(243, 156, 18, 0.3);
+    border-color: #f39c12;
+}
+
+.secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   5. FEEDBACK MESSAGE COLOR VARIANTS
+   app.js swaps the class on #feedbackMessage based on severity.
+   Stronger border on analysis section signals it is a response area.
+   ───────────────────────────────────────────────────────────── */
+.analysis-section {
+    border: 2px solid rgba(243, 156, 18, 0.5);
+}
+
+.feedback-message {
+    padding: 20px;
+    border-radius: 8px;
+    line-height: 1.8;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+/* Green — intention is conscious and constructive */
+.feedback-conscious {
+    background: rgba(46, 204, 113, 0.15);
+    border: 2px solid rgba(46, 204, 113, 0.5);
+    color: #2ecc71;
+}
+
+/* Red — intention flagged as harmful, hard block */
+.feedback-harmful {
+    background: rgba(139, 0, 0, 0.2);
+    border: 3px solid rgba(220, 20, 60, 0.8);
+    color: #ff4444;
+    font-weight: bold;
+}
+
+/* Yellow — neutral or ambiguous intention, soft warning */
+.feedback-warning {
+    background: rgba(255, 193, 7, 0.15);
+    border: 2px solid rgba(255, 193, 7, 0.6);
+    color: #ffc107;
+}
+
+/* Purple — transcendent intention detected */
+.feedback-transcendent {
+    background: rgba(138, 43, 226, 0.15);
+    border: 2px solid rgba(138, 43, 226, 0.6);
+    color: #ba55d3;
+}
+
+/* Reframe box — purple tones distinguish it from the main feedback area */
+.reframed-intention {
+    background: rgba(155, 89, 182, 0.15);
+    border: 2px solid rgba(155, 89, 182, 0.5);
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.reframed-text {
+    color: #9b59b6;
+    font-size: 1em;
+    font-weight: bold;
+    margin: 15px 0;
+    line-height: 1.6;
+    text-align: center;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   6. MANDALA CANVAS AND HASH DISPLAY
+   Canvas scales on small screens via max-width:100%.
+   Purple glow border matches the mandala's internal color palette.
+   Hash display uses monospace to align cryptographic hex characters.
+   ───────────────────────────────────────────────────────────── */
+.mandala-section {
+    text-align: center;
+}
+
+.mandala-subtitle {
+    color: #95a5a6;
+    font-size: 0.9em;
+    margin-bottom: 15px;
+    font-style: italic;
+}
+
+#mandalaCanvas {
+    display: block;
+    margin: 20px auto;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(155, 89, 182, 0.5);
+    border-radius: 8px;
+    max-width: 100%;
+    height: auto;
+    box-shadow: 0 0 30px rgba(155, 89, 182, 0.3);
+}
+
+.mandala-info {
+    margin-top: 15px;
+    text-align: center;
+}
+
+.hash-display {
+    font-family: monospace;
+    color: #95a5a6;
+    font-size: 0.8em;
+    word-break: break-all;
+}
+
+/* Controls row — style toggle and mute button sit side by side,
+   wrap to column on very small screens */
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: #7f8c8d;
+    font-size: 0.9em;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   7. MOBILE RESPONSIVE BREAKPOINTS
+   Adjusts font sizes and layout for screens under 600px.
+   Buttons stack vertically so they remain full-width and tappable.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    body {
+        padding: 10px;
+    }
+
+    h1 {
+        font-size: 1.8em;
+    }
+
+    h2 {
+        font-size: 1.2em;
+    }
+
+    .controls {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .secondary-btn {
+        width: 100%;
+    }
+
+    section {
+        padding: 15px;
+    }
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   8. MEDITATION TIMER STYLES
+   Timer section sits inside .mandala-section below the canvas.
+   Wheel picker, countdown display, and Begin Meditation button
+   are shown/hidden by app.js as the timer state changes.
+   ───────────────────────────────────────────────────────────── */
+.timer-section {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.timer-label {
+    color: #95a5a6;
+    font-size: 0.9em;
+    font-style: italic;
+    margin-bottom: 12px;
+}
+
+.timer-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.timer-btn {
+    padding: 10px 20px;
+    background: rgba(243, 156, 18, 0.15);
+    border: 2px solid rgba(243, 156, 18, 0.5);
+    border-radius: 8px;
+    color: #f39c12;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 80px;
+}
+
+.timer-btn:hover {
+    background: rgba(243, 156, 18, 0.3);
+    border-color: #f39c12;
+    transform: translateY(-2px);
+}
+
+/* Active state — filled gold when timer is running */
+.timer-btn.active {
+    background: rgba(243, 156, 18, 0.4);
+    border-color: #f39c12;
+    box-shadow: 0 0 12px rgba(243, 156, 18, 0.4);
+}
+
+/* Countdown row — large number beside cancel button */
+.countdown {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 10px;
+}
+
+/* Large gold countdown number — pulse animation keeps it feeling alive */
+#countdownDisplay {
+    font-size: 2.5em;
+    font-weight: bold;
+    color: #f39c12;
+    font-family: monospace;
+    text-shadow: 0 0 15px rgba(243, 156, 18, 0.6);
+    animation: timerPulse 1s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.03); }
+}
+
+/* mandalaWrapper transition enables the CSS opacity fade-out
+   triggered by app.js adding the .fading class at session end */
+#mandalaWrapper {
+    transition: opacity 10s ease-out;
+    opacity: 1;
+}
+
+#mandalaWrapper.fading {
+    opacity: 0;
+}
+
+/* Begin Meditation button spacing */
+#startTimerBtn {
+    margin-top: 10px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   9. SESSION COMPLETE SCREEN
+   Fades in slowly after spiral dissolve finishes.
+   Matches the frosted glass card aesthetic of other sections.
+   ───────────────────────────────────────────────────────────── */
+.session-complete {
+    text-align: center;
+    padding: 30px 20px;
+    background: rgba(243, 156, 18, 0.08);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 10px;
+    margin-top: 20px;
+    animation: fadeIn 2s ease-in;
+}
+
+.session-complete p {
+    font-size: 1.3em;
+    color: #f39c12;
+    margin-bottom: 10px;
+}
+
+/* Subtitle below completion message — muted and supportive in tone */
+.session-subtitle {
+    color: #95a5a6 !important;
+    font-style: italic;
+    font-size: 0.95em !important;
+    margin-bottom: 20px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   10. MY INTENTIONS SECTION
+   Scrollable card list — max-height prevents the page from
+   growing indefinitely when many intentions are stored.
+   Custom scrollbar matches the dark theme.
+   Each card is a clickable row: intention text left, delete right.
+   ───────────────────────────────────────────────────────────── */
+.intentions-section {
+    border: 1px solid rgba(243, 156, 18, 0.3);
+}
+
+#intentionsList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+#intentionsList::-webkit-scrollbar {
+    width: 6px;
+}
+
+#intentionsList::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+#intentionsList::-webkit-scrollbar-thumb {
+    background: rgba(243, 156, 18, 0.4);
+    border-radius: 3px;
+}
+
+.intention-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 12px 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(243, 156, 18, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.intention-card:hover {
+    background: rgba(243, 156, 18, 0.1);
+    border-color: rgba(243, 156, 18, 0.5);
+    transform: translateX(3px);
+}
+
+.intention-card-content {
+    flex: 1;
+    text-align: left;
+}
+
+/* Intention text turns gold on hover to reinforce that the card is clickable */
+.intention-card-text {
+    color: #e0e0e0;
+    font-size: 0.95em;
+    line-height: 1.5;
+    margin-bottom: 4px;
+    transition: color 0.2s ease;
+}
+
+.intention-card:hover .intention-card-text {
+    color: #f39c12;
+}
+
+/* Timestamp + hash snippet — monospace keeps the hash readable */
+.intention-card-date {
+    color: #7f8c8d;
+    font-size: 0.75em;
+    font-family: monospace;
+}
+
+/* Delete button — subtle red, small so it doesn't compete with intention text */
+.intention-delete-btn {
+    background: none;
+    border: 1px solid rgba(231, 76, 60, 0.4);
+    border-radius: 5px;
+    color: rgba(231, 76, 60, 0.7);
+    font-size: 0.8em;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.intention-delete-btn:hover {
+    background: rgba(231, 76, 60, 0.15);
+    border-color: rgba(231, 76, 60, 0.8);
+    color: #e74c3c;
+}
+
+/* Shown when all intentions have been deleted */
+.intentions-empty {
+    text-align: center;
+    color: #7f8c8d;
+    font-style: italic;
+    padding: 20px;
+    font-size: 0.9em;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   11. SCROLL WHEEL TIMER PICKER
+   iPhone-style scroll wheel — two columns (HRS, MIN, SEC) with
+   a gold highlight band marking the selected value.
+   The gradient overlay fades items above and below the selection.
+   All scroll behavior is driven by JavaScript in app.js buildWheel().
+   ───────────────────────────────────────────────────────────── */
+
+/* Outer wrapper centers the wheel columns side by side.
+   user-select: none prevents text selection during drag. */
+.wheel-picker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px auto;
+    user-select: none;
+}
+
+.wheel-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.wheel-label {
+    color: #95a5a6;
+    font-size: 0.75em;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+.wheel-separator {
+    font-size: 2em;
+    font-weight: bold;
+    color: #f39c12;
+    margin-top: 15px;
+    text-shadow: 0 0 10px rgba(243, 156, 18, 0.5);
+}
+
+/* Fixed height shows exactly 5 items (44px × 5 = 220px).
+   overflow: hidden clips items outside the visible band. */
+.wheel-scroll {
+    position: relative;
+    width: 80px;
+    height: 220px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 10px;
+    cursor: grab;
+}
+
+.wheel-scroll:active {
+    cursor: grabbing;
+}
+
+/* Gradient overlay fades items at top and bottom, leaving center clear.
+   pointer-events: none so the overlay does not block drag events. */
+.wheel-scroll::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.8) 0%,
+        rgba(0, 0, 0, 0.4) 30%,
+        transparent 40%,
+        transparent 60%,
+        rgba(0, 0, 0, 0.4) 70%,
+        rgba(0, 0, 0, 0.8) 100%
+    );
+    pointer-events: none;
+    z-index: 2;
+    border-radius: 10px;
+}
+
+/* Gold highlight band — top position = (220 - 44) / 2 = 88px,
+   centers the 44px band in the 220px scroll area. */
+.wheel-scroll::after {
+    content: '';
+    position: absolute;
+    top: 88px;
+    left: 0;
+    right: 0;
+    height: 44px;
+    border-top: 1px solid rgba(243, 156, 18, 0.6);
+    border-bottom: 1px solid rgba(243, 156, 18, 0.6);
+    background: rgba(243, 156, 18, 0.08);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Inner track — padding top/bottom = 88px adds 2 blank slots above and
+   below the list so first and last values can center in the highlight band. */
+.wheel-track {
+    position: relative;
+    z-index: 0;
+    padding: 88px 0;
+    transition: transform 0.15s ease-out;
+}
+
+.wheel-item {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6em;
+    font-weight: bold;
+    font-family: monospace;
+    color: #95a5a6;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+/* Selected item — gold and slightly scaled up */
+.wheel-item.selected {
+    color: #f39c12;
+    text-shadow: 0 0 12px rgba(243, 156, 18, 0.6);
+    transform: scale(1.1);
+}
+
+/* Adjacent items — slightly brighter than unselected */
+.wheel-item.near-selected {
+    color: #bdc3c7;
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   12. SACRED / COSMIC STYLE TOGGLE
+   Two-button toggle switches mandala rendering style.
+   Active button fills gold to indicate current selection.
+   app.js calls mandalaGen.setStyle() — no re-hashing needed.
+   ───────────────────────────────────────────────────────────── */
+.style-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+.style-btn {
+    padding: 12px 20px;
+    background: rgba(243, 156, 18, 0.1);
+    border: 2px solid rgba(243, 156, 18, 0.4);
+    border-radius: 8px;
+    color: #95a5a6;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.style-btn:hover {
+    background: rgba(243, 156, 18, 0.2);
+    border-color: rgba(243, 156, 18, 0.7);
+    color: #f39c12;
+}
+
+/* Active state — filled gold, clearly indicates selected style */
+.style-btn.active {
+    background: rgba(243, 156, 18, 0.35);
+    border-color: #f39c12;
+    color: #f39c12;
+    box-shadow: 0 0 12px rgba(243, 156, 18, 0.3);
+}
