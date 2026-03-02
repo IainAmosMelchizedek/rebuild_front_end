@@ -3,33 +3,33 @@
     index.html — Intention Keeper (Front End, Stubbed)
     ===================================================
     PURPOSE:
-    This is the single-page shell for the Intention Keeper application.
-    It defines the DOM structure only — no logic lives here.
+    Single-page shell for the Intention Keeper front end.
+    Defines the DOM structure only — all logic lives in JavaScript modules.
 
     HOW IT FITS TOGETHER:
-    - styles.css     → controls all visual layout, theming, and animation
-    - hash-encoder.js → converts intention text into a SHA-256 hash + spherical coords
-    - intention-analyzer.js → scores the intention as conscious/neutral/unconscious
-    - mandala.js     → reads the hash and draws the sacred geometry on the canvas
-    - audio.js       → drives the Schumann Resonance heartbeat + Third Eye sitar tone
-    - app.js         → wires all of the above together and manages user interactions
+    - css/styles.css          → global theme, layout, animations, responsive rules
+    - js/hash-encoder.js      → SHA-256 hashing + spherical coordinate seeding
+    - js/intention-analyzer.js→ local keyword-based analysis (stub for backend AI)
+    - js/mandala.js           → canvas renderer (Sacred/Cosmic styles)
+    - js/audio.js             → audio engine (currently Schumann + harmonic layer)
+    - js/app.js               → controller (UI wiring, timer, storage, session flow)
+
+    IMPORTANT DOM CONTRACTS (used by app.js):
+    - IDs referenced by JS must exist in this file.
+    - "stopMeditationBtn" is REQUIRED by app.js. It is hidden until timer starts.
+    - Sections are shown/hidden by app.js via inline style toggles and CSS classes.
 
     SEEDING FLOW:
-    User types intention → app.js calls hash-encoder.js → SHA-256 hash produced →
-    hash bytes seed mandala.js (visuals) and audio.js (sound) simultaneously →
-    same intention always produces the same mandala and soundscape.
+    Intention text → SHA-256 hash → hash bytes seed mandala parameters + audio parameters
+    Same intention always reproduces the same visuals (and seeded sound).
 
     STUB NOTE:
-    The consciousness analysis layer (intention-analyzer.js) is currently a local
-    keyword-based system. It will be replaced by a backend AI API call (DeepSeek)
-    once the backend is complete. The DOM structure here does not need to change
-    when that swap happens — only app.js will change.
+    The consciousness analysis module is local and keyword-based.
+    It is designed to be swapped for a backend API call later without changing DOM.
 
     SESSION DATA (stubbed for backend):
-    The app captures: intention text, SHA-256 hash, timestamp, meditation duration,
-    style selected (Sacred/Cosmic), and whether the session was completed.
-    This data is currently stored in localStorage and will be posted to the backend
-    when the API is ready.
+    The front end captures: intention text, hash, timestamp, duration, style,
+    and completion status. Stored in localStorage for now.
 -->
 <html lang="en">
 <head>
@@ -39,6 +39,7 @@
     <title>Intention Keeper - Geometric Visualization</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
+
 <body>
     <div class="container">
 
@@ -52,56 +53,76 @@
 
             <!-- ═══════════════════════════════════════════════════
                  INPUT SECTION
-                 User enters their intention here.
-                 Word counter updates in real time via app.js.
-                 Analyze button disabled if intention exceeds 50 words.
+                 - User types an intention.
+                 - Word counter updates in real time (app.js).
+                 - Analyze button disables if word count exceeds 50.
                  ═══════════════════════════════════════════════════ -->
             <section class="input-section">
                 <h2>Enter Your Intention</h2>
-                <p class="instruction">Intention = Purpose + Attention. What do you intend to do, and why? Think it through before you type it.</p>
+                <p class="instruction">
+                    Intention = Purpose + Attention. What do you intend to do, and why?
+                    Think it through before you type it.
+                </p>
+
                 <textarea id="intentionInput" rows="4" placeholder="Type your intention here..."></textarea>
+
                 <div class="word-counter">
                     <span id="wordCount">0</span> / 50 words
-                    <!-- wordWarning shown by app.js when word count exceeds 50 -->
-                    <span id="wordWarning" style="display: none; color: #e74c3c; font-weight: bold; margin-left: 10px;">⚠️ Exceeds limit</span>
+                    <!-- Shown by app.js when the limit is exceeded -->
+                    <span id="wordWarning"
+                          style="display: none; color: #e74c3c; font-weight: bold; margin-left: 10px;">
+                        ⚠️ Exceeds limit
+                    </span>
                 </div>
+
                 <button class="primary-btn" id="analyzeBtn">Analyze Intention</button>
             </section>
 
+
             <!-- ═══════════════════════════════════════════════════
                  MY INTENTIONS SECTION
-                 Hidden by default. app.js shows this section when
-                 at least one intention exists in localStorage.
-                 Each card is clickable — regenerates that intention's mandala.
+                 - Hidden until at least one stored intention exists.
+                 - app.js renders the list from localStorage.
+                 - Each card click regenerates a mandala.
                  ═══════════════════════════════════════════════════ -->
             <section class="intentions-section" id="intentionsSection" style="display: none;">
                 <h2>My Intentions</h2>
                 <p class="instruction">Click any intention to regenerate its mandala.</p>
-                <!-- intentionsList populated dynamically by app.js renderIntentionsList() -->
+
+                <!-- Populated by app.js -->
                 <div id="intentionsList"></div>
-                <button class="secondary-btn" id="clearAllBtn" style="margin-top: 15px;">Clear All Intentions</button>
+
+                <button class="secondary-btn" id="clearAllBtn" style="margin-top: 15px;">
+                    Clear All Intentions
+                </button>
             </section>
+
 
             <!-- ═══════════════════════════════════════════════════
                  ANALYSIS SECTION
-                 Hidden until the user submits an intention.
-                 app.js shows the correct sub-panel based on severity:
-                   - unconscious → reframedSection only (no keep original)
-                   - neutral     → reframedSection + keepOriginalBtn
-                   - conscious   → directGenerateSection only
+                 - Hidden until the user clicks Analyze.
+                 - app.js chooses which sub-panels to show based on severity:
+                   * unconscious → reframe required (no keep original)
+                   * neutral     → reframe offered + keep original
+                   * conscious   → direct generate button
                  ═══════════════════════════════════════════════════ -->
             <section class="analysis-section" id="analysisSection" style="display: none;">
                 <h2>Consciousness Analysis</h2>
-                <!-- feedbackMessage class swapped by app.js to match severity color -->
+
+                <!-- app.js swaps class names to set severity color -->
                 <div id="feedbackMessage" class="feedback-message"></div>
 
                 <!-- Reframe panel — shown for harmful or neutral intentions -->
                 <div id="reframedSection" class="reframed-intention" style="display: none;">
                     <h3>Reframed Intention</h3>
                     <p class="reframed-text" id="reframedText"></p>
+
                     <button class="primary-btn" id="acceptReframeBtn">Accept Reframed Intention</button>
-                    <!-- keepOriginalBtn shown only for neutral, never for unconscious -->
-                    <button class="secondary-btn" id="keepOriginalBtn" style="display: none;">Keep Original (I Understand)</button>
+
+                    <!-- Shown only for neutral, never for unconscious -->
+                    <button class="secondary-btn" id="keepOriginalBtn" style="display: none;">
+                        Keep Original (I Understand)
+                    </button>
                 </div>
 
                 <!-- Direct generate panel — shown only when intention passes analysis -->
@@ -110,42 +131,39 @@
                 </div>
             </section>
 
+
             <!-- ═══════════════════════════════════════════════════
                  MANDALA SECTION
-                 Hidden until mandala generation is triggered.
-                 Contains: canvas, cryptographic signature display,
-                 meditation timer (scroll wheels + countdown),
-                 session complete screen, style toggle, and mute button.
+                 - Hidden until mandala generation occurs.
+                 - Contains: canvas, hash display, meditation timer, session complete,
+                   style toggle, and mute control.
                  ═══════════════════════════════════════════════════ -->
             <section class="mandala-section" id="mandalaSection" style="display: none;">
                 <h2>Your Geometric Pattern</h2>
                 <p class="mandala-subtitle">A unique visualization generated from your intention</p>
 
-                <!-- mandalaWrapper div allows spiral dissolve CSS transition
-                     without reflowing the surrounding layout -->
+                <!-- Wrapper supports fade-out transitions controlled by app.js -->
                 <div id="mandalaWrapper">
                     <canvas id="mandalaCanvas" width="600" height="600"></canvas>
                 </div>
 
-                <!-- Hash shown truncated here; full hash is drawn on the canvas itself -->
                 <div class="mandala-info">
                     <p class="hash-display">Cryptographic Signature: <span id="hashDisplay"></span></p>
                 </div>
 
+
                 <!-- ───────────────────────────────────────────────
                      MEDITATION TIMER SECTION
-                     Three iPhone-style scroll wheels: HRS / MIN / SEC.
-                     Supports sessions from 1 second up to 2h 59m 59s.
-                     Begin Meditation starts the countdown.
-                     At zero: spiral dissolve + audio fade trigger together.
+                     - Three scroll wheels: HRS / MIN / SEC.
+                     - Begin Meditation starts countdown and shows Stop button.
+                     - Cancel restores wheel UI without saving a session.
+                     - Stop Meditation triggers end session early (saved as completed:false).
                      ─────────────────────────────────────────────── -->
                 <div class="timer-section" id="timerSection">
                     <p class="timer-label">Set Meditation Duration</p>
 
-                    <!-- Wheel columns built dynamically by app.js buildWheel() -->
                     <div class="wheel-picker" id="wheelPicker">
 
-                        <!-- Hours wheel: range 0–2 -->
                         <div class="wheel-column">
                             <div class="wheel-label">HRS</div>
                             <div class="wheel-scroll" id="hoursWheel"></div>
@@ -153,7 +171,6 @@
 
                         <div class="wheel-separator">:</div>
 
-                        <!-- Minutes wheel: range 0–59 -->
                         <div class="wheel-column">
                             <div class="wheel-label">MIN</div>
                             <div class="wheel-scroll" id="minutesWheel"></div>
@@ -161,7 +178,6 @@
 
                         <div class="wheel-separator">:</div>
 
-                        <!-- Seconds wheel: range 0–59 -->
                         <div class="wheel-column">
                             <div class="wheel-label">SEC</div>
                             <div class="wheel-scroll" id="secondsWheel"></div>
@@ -172,18 +188,20 @@
                     <button class="primary-btn" id="startTimerBtn">Begin Meditation</button>
 
                     <!-- Countdown row — hidden until timer starts.
-                         cancelTimerBtn restores wheel picker without dissolve. -->
+                         stopMeditationBtn MUST exist for app.js.
+                         It is revealed by app.js when the countdown begins. -->
                     <div class="countdown" id="countdown" style="display: none;">
                         <span id="countdownDisplay">00:00:00</span>
                         <button class="secondary-btn" id="cancelTimerBtn">Cancel</button>
+                        <button class="secondary-btn" id="stopMeditationBtn" style="display:none;">Stop Meditation</button>
                     </div>
                 </div>
 
+
                 <!-- ───────────────────────────────────────────────
                      SESSION COMPLETE SCREEN
-                     Shown by app.js after spiral dissolve finishes (8s).
-                     Begin New Session does a full page reload to guarantee
-                     clean audio, animation, and timer state.
+                     - Shown after spiral dissolve finishes.
+                     - Begin New Session reloads page to reset state.
                      ─────────────────────────────────────────────── -->
                 <div class="session-complete" id="sessionComplete" style="display: none;">
                     <p>🙏 Your meditation session is complete.</p>
@@ -191,19 +209,18 @@
                     <button class="primary-btn" id="newSessionBtn">Begin New Session</button>
                 </div>
 
+
                 <!-- ───────────────────────────────────────────────
                      CONTROLS ROW
-                     Sacred/Cosmic toggle switches mandala rendering style
-                     without re-hashing — setStyle() reuses stored hash params.
-                     Mute button targets Schumann Resonance heartbeat layer.
+                     - Sacred/Cosmic toggle changes mandala draw mode without re-hashing.
+                     - Mute button label is updated dynamically by app.js.
                      ─────────────────────────────────────────────── -->
                 <div class="controls">
                     <div class="style-toggle">
-                        <!-- sacredBtn active by default — Sacred is the default style -->
                         <button class="style-btn active" id="sacredBtn">⚓ Sacred</button>
                         <button class="style-btn" id="cosmicBtn">✦ Cosmic</button>
                     </div>
-                    <!-- Label updated dynamically by app.js on mute/unmute -->
+
                     <button class="secondary-btn" id="muteBtn">🔊 Mute Schumann Resonance</button>
                 </div>
 
@@ -216,11 +233,11 @@
     </div>
 
     <!-- Script load order is critical:
-         hash-encoder  → must load before mandala (provides spherical coord functions)
-         intention-analyzer → must load before app (IntentionAnalyzer object used in app.js)
-         mandala       → must load before app (MandalaGenerator class used in app.js)
-         audio         → must load before app (IntentionAudioEngine class used in app.js)
-         app           → loads last, depends on all modules above being present -->
+         hash-encoder          → provides hash + coordinate utilities
+         intention-analyzer    → provides IntentionAnalyzer used by app.js
+         mandala               → provides MandalaGenerator used by app.js
+         audio                 → provides IntentionAudioEngine used by app.js
+         app                   → wires everything together -->
     <script src="js/hash-encoder.js"></script>
     <script src="js/intention-analyzer.js"></script>
     <script src="js/mandala.js"></script>
