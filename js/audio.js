@@ -2,22 +2,30 @@
 // audio.js — Intention Keeper (Front End, Stubbed)
 // =============================================================
 // PURPOSE:
-// Single-layer sacred audio engine (Schumann Resonance only).
+// Single-layer sacred audio engine (Schumann Resonance rate only).
 //
-// This file intentionally contains ONLY the Schumann Resonance “heartbeat” layer.
-// No harmonic / “third eye” layer exists in this version.
+// IMPORTANT CLARIFICATION (audibility):
+// - 7.83 Hz is below typical human hearing and most device speakers.
+// - To keep the experience audible while honoring the Schumann *rate*,
+//   we drive an audible low-frequency "carrier" tone (e.g., 80 Hz)
+//   with an amplitude envelope that pulses at 7.83 Hz.
+//
+// WHAT THIS IS (and is not):
+// - This is ONE layer only.
+// - No harmonic / "third eye" / second oscillator layer exists here.
+// - The Schumann value is used as the *pulse frequency* (heartbeat rate).
 //
 // HOW IT FITS:
 // - Loaded before app.js in index.html
 // - app.js instantiates IntentionAudioEngine and calls:
-//     start(hashNumbers)  → begins Schumann layer (hashNumbers unused for now; kept for API stability)
-//     stop()              → clears intervals and silences audio
+//     start(hashNumbers)  → begins the Schumann-rate pulse (hashNumbers unused; kept for API stability)
+//     stop()              → clears interval and silences audio
 //     toggleMute()        → smooth gain ramp to avoid clicks
 //
 // DESIGN NOTES:
-// - AudioContext creation is deferred until the first user gesture (browser autoplay rules).
+// - AudioContext creation is deferred until the first user gesture (autoplay rules).
+// - A gentle compressor prevents clipping while allowing stronger perceived loudness.
 // - Mute uses a short ramp to avoid pops/clicks.
-// - Gain is normalized to a single consistent operating level (0.75).
 // =============================================================
 
 class IntentionAudioEngine {
@@ -33,28 +41,44 @@ class IntentionAudioEngine {
         this.muted = false;
         this.running = false;
 
-        // FIXED CONSTANT: 7.83 Hz — Schumann Resonance.
+        // FIXED CONSTANT: 7.83 Hz — Schumann Resonance (used as pulse rate).
         this.ENTRAINMENT_HZ = 7.83;
 
-        // Operating gain level for unmuted playback (kept consistent everywhere).
-        this.OPERATING_GAIN = 0.75;
+        // AUDIBLE CARRIER (Hz): low bass that most speakers can reproduce.
+        // 80 Hz is a good compromise across laptops/phones.
+        this.CARRIER_HZ = 80;
+
+        // Timing / envelope tuning (kept conservative to reduce distortion).
+        this.PULSE_INTERVAL_MS = 1000 / this.ENTRAINMENT_HZ; // ~127.7ms
+        this.ATTACK_S = 0.008;   // 8ms
+        this.DECAY_S  = 0.25;    // 250ms
+        this.EVENT_DURATION_S = 0.30; // oscillator lifetime per pulse
+
+        // Loudness knobs:
+        // - OPERATING_GAIN controls overall output.
+        // - PULSE_PEAK_GAIN controls the pulse strength into the compressor.
+        //
+        // If it's still too faint on a device, increase OPERATING_GAIN first,
+        // then PULSE_PEAK_GAIN. The compressor should prevent hard clipping.
+        this.OPERATING_GAIN = 1.10;
+        this.PULSE_PEAK_GAIN = 2.6;
     }
 
     // Initializes AudioContext and processing chain:
-    //   Oscillators → Compressor → MasterGain → Speakers
-    // Called once on first use. Subsequent calls are no-ops.
+    //   Oscillator → Envelope Gain → Compressor → MasterGain → Speakers
     initContext() {
         if (this.ctx) return;
 
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // Gentle limiting to prevent clipping.
+        // Gentle limiter-like compression to keep peaks under control.
+        // Slightly stronger than before to allow higher perceived loudness.
         this.compressor = this.ctx.createDynamicsCompressor();
-        this.compressor.threshold.setValueAtTime(-12, this.ctx.currentTime);
-        this.compressor.knee.setValueAtTime(6, this.ctx.currentTime);
-        this.compressor.ratio.setValueAtTime(3, this.ctx.currentTime);
+        this.compressor.threshold.setValueAtTime(-18, this.ctx.currentTime);
+        this.compressor.knee.setValueAtTime(10, this.ctx.currentTime);
+        this.compressor.ratio.setValueAtTime(6, this.ctx.currentTime);
         this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
-        this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+        this.compressor.release.setValueAtTime(0.20, this.ctx.currentTime);
 
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.setValueAtTime(this.OPERATING_GAIN, this.ctx.currentTime);
@@ -63,37 +87,41 @@ class IntentionAudioEngine {
         this.masterGain.connect(this.ctx.destination);
     }
 
-    // Fires a short sine pulse at the Schumann rate (~7.83 Hz).
-    // This is a felt “heartbeat” style thud rather than a musical tone.
+    // Fires a short pulse at the Schumann rate (~7.83 Hz),
+    // using an audible bass carrier so it can be heard on normal speakers.
     startHeartbeat() {
-        const intervalMs = 1000 / this.ENTRAINMENT_HZ; // ~128ms
+        const intervalMs = this.PULSE_INTERVAL_MS;
 
         this.heartbeatInterval = setInterval(() => {
             if (!this.ctx || this.muted) return;
 
+            const now = this.ctx.currentTime;
+
+            // Audible carrier oscillator.
             const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-
-            // Deep thud: low frequency sine with a small downward pitch bend.
-            const hitFreq = 8; // ~8 Hz (sub-audio / felt pulse)
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(hitFreq * 1.3, this.ctx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(hitFreq, this.ctx.currentTime + 0.06);
 
-            // Soft attack + decay envelope.
-            gain.gain.setValueAtTime(0, this.ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(1.5, this.ctx.currentTime + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+            // Small downward bend adds a "thud" character without adding a second layer.
+            osc.frequency.setValueAtTime(this.CARRIER_HZ * 1.10, now);
+            osc.frequency.exponentialRampToValueAtTime(this.CARRIER_HZ, now + 0.06);
 
-            osc.connect(gain);
-            gain.connect(this.compressor);
+            // Envelope gain (per-pulse).
+            const env = this.ctx.createGain();
+            env.gain.setValueAtTime(0.0001, now);
 
-            osc.start(this.ctx.currentTime);
-            osc.stop(this.ctx.currentTime + 0.55);
+            // Attack → peak → decay. (Peak is intentionally >1; compressor handles it.)
+            env.gain.linearRampToValueAtTime(this.PULSE_PEAK_GAIN, now + this.ATTACK_S);
+            env.gain.exponentialRampToValueAtTime(0.0001, now + this.DECAY_S);
+
+            osc.connect(env);
+            env.connect(this.compressor);
+
+            osc.start(now);
+            osc.stop(now + this.EVENT_DURATION_S);
         }, intervalMs);
     }
 
-    // Starts Schumann heartbeat.
+    // Starts Schumann heartbeat (rate-based).
     // Signature keeps hashNumbers for compatibility with app.js (unused here).
     start(hashNumbers) {
         void hashNumbers; // intentionally unused (kept for stable API)
@@ -105,15 +133,13 @@ class IntentionAudioEngine {
         // Resume context if browser suspended it (common on mobile).
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
+        // Ensure gain is at operating level when starting.
+        this.masterGain.gain.setValueAtTime(this.OPERATING_GAIN, this.ctx.currentTime);
+
         this.startHeartbeat();
 
         this.running = true;
         this.muted = false;
-
-        // Ensure gain is at the operating level when starting.
-        if (this.masterGain) {
-            this.masterGain.gain.setValueAtTime(this.OPERATING_GAIN, this.ctx.currentTime);
-        }
     }
 
     // Stops heartbeat and clears interval handle.
@@ -123,22 +149,34 @@ class IntentionAudioEngine {
             this.heartbeatInterval = null;
         }
         this.running = false;
+
+        // Hard-stop any lingering audio smoothly.
+        if (this.masterGain && this.ctx) {
+            const now = this.ctx.currentTime;
+            this.masterGain.gain.cancelScheduledValues(now);
+            this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+            this.masterGain.gain.linearRampToValueAtTime(0.0001, now + 0.08);
+            // Bring it back to operating level so the next start() doesn't jump from near-zero.
+            this.masterGain.gain.linearRampToValueAtTime(this.OPERATING_GAIN, now + 0.12);
+        }
     }
 
-    // Toggles mute state with a smooth 100ms gain ramp to prevent clicks.
+    // Toggles mute state with a smooth ramp to prevent clicks.
     // Returns the new muted state so app.js can update the button label.
     toggleMute() {
         if (!this.masterGain || !this.ctx) return this.muted;
 
         this.muted = !this.muted;
 
+        const now = this.ctx.currentTime;
+        this.masterGain.gain.cancelScheduledValues(now);
+        this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+
         if (this.muted) {
-            // Ramp to silence over 100ms.
-            this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
+            this.masterGain.gain.linearRampToValueAtTime(0.0, now + 0.10);
         } else {
             if (this.ctx.state === 'suspended') this.ctx.resume();
-            // Ramp back to operating gain over 100ms.
-            this.masterGain.gain.linearRampToValueAtTime(this.OPERATING_GAIN, this.ctx.currentTime + 0.1);
+            this.masterGain.gain.linearRampToValueAtTime(this.OPERATING_GAIN, now + 0.10);
         }
 
         return this.muted;
