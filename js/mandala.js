@@ -2,12 +2,13 @@
 // mandala.js — Intention Keeper (Front End, Stubbed)
 // =============================================================
 // PURPOSE:
-// Deterministic sacred-geometry renderer for the Intention Keeper.
-// A SHA-256-derived point constellation is generated elsewhere (hash-encoder.js)
-// and MUST remain the fixed foundation. This file only decides how to:
-//   - connect those fixed points (graph topology)
-//   - layer symmetries/rings (render structure)
-//   - animate breathing/rotation and (for Cosmic) smooth morphing
+// Deterministic sacred-geometry renderer for Intention Keeper.
+// The SHA-256-derived constellation (points) is generated via hash-encoder.js
+// and MUST remain the fixed foundation. This file only determines:
+//
+//   - how to connect those fixed points (graph topology)
+//   - how to layer rings + symmetries (render structure)
+//   - how to animate breathing/rotation and (Cosmic) smooth morphing
 //
 // HARD REQUIREMENTS (must stay fixed by design):
 // ✅ SHA-256 identity (generateHash) — unchanged
@@ -24,10 +25,9 @@
 // - Hash-tied modulation (alpha/width/hue) that is deterministic
 //
 // PERFORMANCE ASSUMPTION:
-// Canvas rendering must remain smooth on typical laptops/phones.
-// This file avoids per-frame expensive allocations where possible,
-// and avoids “snapping” by blending between topologies instead of rounding.
-//
+// - Avoid per-frame allocations where possible.
+// - Avoid “snapping” by blending between edge sets instead of rounding.
+// - Avoid O(n^2) helper calls (e.g., perm.indexOf) inside hot loops.
 // =============================================================
 
 class MandalaGenerator {
@@ -102,13 +102,13 @@ class MandalaGenerator {
     // MUST REMAIN: point count formula.
     const numPoints = 8 + (this.hashNumbers[0] % 8);
 
-    // Rings/symmetry are still derived from the hash (stable per intention).
+    // Rings/symmetry are derived from the hash (stable per intention).
     this.numRings = 3 + (this.hashNumbers[1] % 5);
     this.primarySymmetry = [6, 8, 12, 16][this.hashNumbers[2] % 4];
     this.baseHue = this.hashNumbers[3] % 360;
     this.complexity = 1 + (this.hashNumbers[4] % 3);
 
-    // Secondary symmetry is used as an optional extra layer.
+    // Secondary symmetry used as optional extra layer.
     this.secondarySymmetry = [3, 5, 7, 9][this.hashNumbers[6] % 4];
 
     // Lissajous (Cosmic) parameters.
@@ -173,114 +173,212 @@ class MandalaGenerator {
   }
 
   // -------------------------------------------------------------
-  // TOPOLOGY ENGINE (deterministic, large design space)
+  // TOPOLOGY ENGINE (deterministic, wide design space)
   // -------------------------------------------------------------
   buildTopologyEngine(hashNumbers, n) {
-    // Seeds: pulled from mid-bytes to reduce correlation with core structure.
+    // Seeds pulled from mid-bytes to reduce correlation with core structure.
     const seedA = (hashNumbers[12] << 8) | hashNumbers[13];
     const seedB = (hashNumbers[14] << 8) | hashNumbers[15];
     const seedC = (hashNumbers[16] << 8) | hashNumbers[17];
     const seedD = (hashNumbers[18] << 8) | hashNumbers[19];
 
-    // “Family” choices: selecting multiple independent families creates
-    // far more variety than a single skip-based star polygon.
-    const baseFamily = hashNumbers[23] % 8;
-    const auxFamily = hashNumbers[24] % 8;
+    // A stable node permutation is the biggest “pattern space” multiplier.
+    // It changes ONLY connection ordering, not the constellation itself.
+    const perm = this.makePermutation(n, seedC);
+    const invPerm = new Array(n);
+    for (let k = 0; k < n; k++) invPerm[perm[k]] = k;
 
-    // Perimeter/degree limits to keep density controlled.
-    const minDegree = 1;
-    const maxDegree = Math.max(2, Math.min(6, 2 + (hashNumbers[25] % 5)));
+    // Family space (expanded): more families + parameterized families.
+    // Cosmic morph blends across this space; Sacred picks stable indices.
+    const familyCount = 14;
+    const baseFamily = hashNumbers[23] % familyCount;
+    const auxFamily = hashNumbers[24] % familyCount;
 
-    // Derive stable “multipliers” used by certain families.
+    // Density controls (prevent “blob” graphs).
+    // These are upper-bounds; the renderer still applies symmetry/rings.
+    const maxEdgesPerNode = Math.max(2, Math.min(6, 2 + (hashNumbers[25] % 5)));
+
+    // Minimum hop in permutation space discourages “short-edge clumping.”
+    const minHop = 1 + (hashNumbers[26] % Math.max(1, Math.floor(n / 3)));
+
+    // Cosmic edge thinning: deterministic, avoids per-frame randomness.
+    // Higher values = fewer edges drawn, lower CPU + less blob tendency.
+    const cosmicEdgeStride = 1 + (hashNumbers[27] % 3); // 1..3
+
+    // Modulators used by some families.
     const mult1 = 2 + (seedA % Math.max(2, n - 1));
     const mult2 = 2 + (seedB % Math.max(2, n - 1));
 
-    // A stable, deterministic permutation (for “permuted chord” family).
-    const perm = this.makePermutation(n, seedC);
+    // Deterministic fractional step (stable per intention).
+    const irrationalStep = 0.65 + (seedD % 900) / 1000; // 0.65 .. 1.549
 
-    // Deterministic irrational-ish step (golden-ratio flavored) in index space.
-    // We keep it stable per intention; time only blends/morphs, not randomizes.
-    const irrationalStep = 0.5 + (seedD % 1000) / 1000; // 0.5 .. 1.499
+    // Tiny deterministic “noise” for gating decisions.
+    const mixU32 = (x) => {
+      x = x >>> 0;
+      x ^= x >>> 16;
+      x = Math.imul(x, 0x7feb352d) >>> 0;
+      x ^= x >>> 15;
+      x = Math.imul(x, 0x846ca68b) >>> 0;
+      x ^= x >>> 16;
+      return x >>> 0;
+    };
 
-    // Families: each returns an integer target index in [0, n).
-    const families = [
-      // 0) Skip/star polygon (classic), but parameterized by time-drift.
-      (i, t) => {
-        const drift = 1 + Math.sin(t) * 0.5;
-        const k = Math.max(1, Math.round(((seedA % (n - 1)) + 1) * drift)) % n;
-        return (i + k) % n;
-      },
+    const gate01 = (i, ring, sym, lane) => {
+      // 0..1 deterministic “random-like” value for thinning edges
+      const x =
+        (seedA << 16) ^ seedB ^
+        (i * 2654435761) ^
+        (ring * 1013904223) ^
+        (sym * 1664525) ^
+        (lane * 2246822519);
+      return mixU32(x) / 0xFFFFFFFF;
+    };
 
-      // 1) Multiply modulo (produces jumpy chords, many distinct graphs).
-      (i, t) => {
-        const drift = 0.5 + 0.5 * Math.sin(t * 0.7);
-        const m = Math.max(2, Math.round(mult1 * (0.75 + drift * 0.5)));
-        return (i * m + (seedB % n)) % n;
-      },
+    // Helpers for permutation-space indexing.
+    const permIndexOfNode = (nodeIndex) => invPerm[nodeIndex];
+    const nodeAtPermIndex = (pIdx) => perm[(pIdx % n + n) % n];
 
-      // 2) Two-step braid (alternating offsets).
-      (i, t) => {
-        const a = 1 + (seedA % Math.max(1, n - 1));
-        const b = 1 + (seedB % Math.max(1, n - 1));
-        const w = 0.5 + 0.5 * Math.sin(t);
-        const k = (1 - w) * a + w * b;
-        return (i + Math.max(1, Math.floor(k))) % n;
-      },
+    // Families operate in permutation-index space (0..n-1),
+    // then map back to actual node indices through perm[].
+    const families = [];
 
-      // 3) Mirror chord (reflect then offset).
-      (i, t) => {
-        const reflect = (n - 1 - i);
-        const off = 1 + (seedC % Math.max(1, n - 1));
-        const drift = 1 + 0.35 * Math.sin(t * 1.3);
-        return (reflect + Math.max(1, Math.floor(off * drift))) % n;
-      },
+    // 0) Star/skip in perm-space with gentle drift.
+    families.push((pIdx, t) => {
+      const baseK = 1 + (seedA % Math.max(1, n - 1));
+      const drift = 1 + 0.35 * Math.sin(t);
+      const k = Math.max(1, Math.floor(baseK * drift)) % n;
+      return (pIdx + k) % n;
+    });
 
-      // 4) Permuted chord (stable permutation graph).
-      (i, t) => {
-        // Small drift chooses neighbor within permutation to create richer variety
-        // without ever leaving the permuted “space.”
-        const w = 0.5 + 0.5 * Math.sin(t * 0.9);
-        const step = Math.max(1, Math.floor(1 + w * (maxDegree - 1)));
-        return perm[(perm.indexOf(i) + step) % n];
-      },
+    // 1) Alternate braid (two steps, blended by sin).
+    families.push((pIdx, t) => {
+      const a = 1 + (seedA % Math.max(1, n - 1));
+      const b = 1 + (seedB % Math.max(1, n - 1));
+      const w = 0.5 + 0.5 * Math.sin(t * 0.9);
+      const k = Math.max(1, Math.floor((1 - w) * a + w * b));
+      return (pIdx + k) % n;
+    });
 
-      // 5) Irrational stride (index-space “rotation” via fractional drift).
-      (i, t) => {
-        const phase = (i * irrationalStep + t * 0.2) % n;
-        return (Math.floor(phase) + (seedA % 3)) % n;
-      },
+    // 2) Mirror chord (reflect then offset).
+    families.push((pIdx, t) => {
+      const reflect = (n - 1 - pIdx);
+      const off = 1 + (seedC % Math.max(1, n - 1));
+      const drift = 1 + 0.30 * Math.sin(t * 1.1);
+      return (reflect + Math.max(1, Math.floor(off * drift))) % n;
+    });
 
-      // 6) Bit-ish shuffle (good for n up to 15; still works for 8..15).
-      (i, t) => {
-        const shift = 1 + (seedB % 3);
-        const mask = (1 << 4) - 1; // supports up to 16
-        const j = (((i << shift) | (i >> (4 - shift))) & mask) % n;
-        const drift = (seedD % n);
-        return (j + drift + Math.floor(1 + 0.5 * Math.sin(t))) % n;
-      },
+    // 3) Multiply modulo in perm-space (high variety).
+    families.push((pIdx, t) => {
+      const drift = 0.6 + 0.4 * Math.sin(t * 0.7);
+      const m = Math.max(2, Math.round(mult1 * (0.85 + drift * 0.35)));
+      return (pIdx * m + (seedB % n)) % n;
+    });
 
-      // 7) Dual-multiply weave (two modulo maps blended).
-      (i, t) => {
-        const w = 0.5 + 0.5 * Math.sin(t * 0.6);
-        const a = (i * mult1 + seedA) % n;
-        const b = (i * mult2 + seedB) % n;
-        // Choose smoothly by alternating “edge set weighting” elsewhere.
-        return w < 0.5 ? a : b;
-      }
-    ];
+    // 4) Dual multiply weave (switches based on phase).
+    families.push((pIdx, t) => {
+      const a = (pIdx * mult1 + seedA) % n;
+      const b = (pIdx * mult2 + seedB) % n;
+      const w = 0.5 + 0.5 * Math.sin(t * 0.55);
+      return (w < 0.5) ? a : b;
+    });
 
-    const clampDegree = (d) => Math.max(minDegree, Math.min(maxDegree, d));
+    // 5) Irrational stride (fractional rotation in perm space).
+    families.push((pIdx, t) => {
+      const phase = (pIdx * irrationalStep + t * 0.25) % n;
+      return (Math.floor(phase) + (seedA % 3)) % n;
+    });
+
+    // 6) “Weave” with alternating long/short hops.
+    families.push((pIdx, t) => {
+      const longHop = Math.max(2, minHop + (seedB % Math.max(2, n - 1)));
+      const shortHop = Math.max(1, minHop);
+      const w = 0.5 + 0.5 * Math.sin(t * 1.3);
+      const k = (w < 0.5) ? longHop : shortHop;
+      return (pIdx + k) % n;
+    });
+
+    // 7) Offset-from-center chords (encourages perimeter crossings).
+    families.push((pIdx, t) => {
+      const center = Math.floor(n / 2);
+      const d = pIdx - center;
+      const off = 1 + (seedD % Math.max(1, n - 1));
+      const drift = 1 + 0.25 * Math.sin(t * 0.8);
+      return (center - d + Math.floor(off * drift)) % n;
+    });
+
+    // 8) Bit-ish shuffle (works well for up to 16 nodes).
+    families.push((pIdx, t) => {
+      const shift = 1 + (seedB % 3);
+      const mask = (1 << 4) - 1;
+      const j = (((pIdx << shift) | (pIdx >> (4 - shift))) & mask) % n;
+      const drift = (seedD % n);
+      return (j + drift + Math.floor(1 + 0.5 * Math.sin(t))) % n;
+    });
+
+    // 9) “Near-far” alternator to avoid only-short edges.
+    families.push((pIdx, t) => {
+      const near = (pIdx + minHop) % n;
+      const far = (pIdx + Math.max(minHop + 2, Math.floor(n / 2))) % n;
+      const w = 0.5 + 0.5 * Math.sin(t * 0.65);
+      return (w < 0.5) ? near : far;
+    });
+
+    // 10) Two-chord fan: target depends on parity.
+    families.push((pIdx, t) => {
+      const k1 = Math.max(1, minHop + (seedA % Math.max(1, n - 1)));
+      const k2 = Math.max(1, minHop + (seedC % Math.max(1, n - 1)));
+      const drift = 1 + 0.20 * Math.sin(t * 1.05);
+      const kk1 = Math.max(1, Math.floor(k1 * drift));
+      const kk2 = Math.max(1, Math.floor(k2 * drift));
+      return (pIdx + ((pIdx & 1) ? kk2 : kk1)) % n;
+    });
+
+    // 11) “Opposed braid”: pair with opposite then add hop.
+    families.push((pIdx, t) => {
+      const opp = (pIdx + Math.floor(n / 2)) % n;
+      const hop = Math.max(1, minHop + (seedB % Math.max(1, n - 1)));
+      const drift = 1 + 0.25 * Math.sin(t * 0.9);
+      return (opp + Math.max(1, Math.floor(hop * drift))) % n;
+    });
+
+    // 12) “Saw weave”: alternating forward/back hops.
+    families.push((pIdx, t) => {
+      const hop = Math.max(1, minHop + (seedD % Math.max(1, n - 1)));
+      const dir = (Math.sin(t * 0.8 + pIdx) >= 0) ? 1 : -1;
+      return (pIdx + dir * hop) % n;
+    });
+
+    // 13) “Triad-ish” chord: target from 1/3 and 2/3 partitions.
+    families.push((pIdx, t) => {
+      const a = (pIdx + Math.max(minHop, Math.floor(n / 3))) % n;
+      const b = (pIdx + Math.max(minHop, Math.floor((2 * n) / 3))) % n;
+      const w = 0.5 + 0.5 * Math.sin(t * 0.7);
+      return (w < 0.5) ? a : b;
+    });
+
+    // Clamp hops away from zero/self and enforce minHop.
+    const enforceHop = (pFrom, pTo) => {
+      let delta = (pTo - pFrom + n) % n;
+      if (delta === 0) delta = 1;
+      if (delta < minHop) delta = minHop;
+      return (pFrom + delta) % n;
+    };
 
     return {
       n,
+      perm,
+      invPerm,
       baseFamily,
       auxFamily,
       families,
-      clampDegree,
-      seedA,
-      seedB,
-      seedC,
-      seedD
+      seedA, seedB, seedC, seedD,
+      maxEdgesPerNode,
+      minHop,
+      cosmicEdgeStride,
+      permIndexOfNode,
+      nodeAtPermIndex,
+      enforceHop,
+      gate01
     };
   }
 
@@ -288,7 +386,6 @@ class MandalaGenerator {
   makePermutation(n, seed) {
     let s = seed >>> 0;
     const rand = () => {
-      // LCG constants (fast, deterministic)
       s = (1664525 * s + 1013904223) >>> 0;
       return s / 0x100000000;
     };
@@ -303,29 +400,36 @@ class MandalaGenerator {
     return arr;
   }
 
-  // Return a blended “target index” by mixing two families.
-  // This avoids snapping: instead of changing a discrete integer parameter abruptly,
-  // we render BOTH edge sets with weights elsewhere. Here we just compute targets.
+  // Compute topology targets for node i at time t.
+  // Sacred: stable (two stable graphs layered).
+  // Cosmic: returns two morph lanes (A and B), each blending between adjacent families.
   getTopologyTargets(i, t) {
     const topo = this.topo;
     const n = topo.n;
 
-    // Sacred: stable (no morphing over time).
+    // Convert node index → permutation-index space.
+    const pIdx = topo.permIndexOfNode(i);
+
     if (this.style === "sacred") {
-      const a = topo.families[topo.baseFamily](i, 0);
-      // Auxiliary stable layer for richness (still stable).
-      const b = topo.families[topo.auxFamily](i, 0);
-      return { a, b, w: 0.0 };
+      const pa = topo.families[topo.baseFamily](pIdx, 0);
+      const pb = topo.families[topo.auxFamily](pIdx, 0);
+
+      // Enforce minimum hop (reduces self/near repeats that collapse variety).
+      const pA2 = topo.enforceHop(pIdx, pa);
+      const pB2 = topo.enforceHop(pIdx, pb);
+
+      return {
+        a: topo.nodeAtPermIndex(pA2),
+        b: topo.nodeAtPermIndex(pB2)
+      };
     }
 
-    // Cosmic: smooth morph through family space.
-    // We move through families continuously and blend adjacent families.
-    const familyPhase = t * topo.n * this.morphSpeed; // scaled for variety
+    // Cosmic: smooth morph through family space, blended by fractional phase.
+    const familyPhase = t * topo.n * this.morphSpeed;
     const baseIdx = Math.floor(familyPhase) % topo.families.length;
     const nextIdx = (baseIdx + 1) % topo.families.length;
-    const w = familyPhase - Math.floor(familyPhase); // 0..1 blend
+    const w = familyPhase - Math.floor(familyPhase);
 
-    // A second, independent morph lane (creates interference patterns).
     const auxPhase = t * topo.n * (this.morphSpeed * 0.73);
     const auxIdx = (Math.floor(auxPhase) + topo.auxFamily) % topo.families.length;
     const auxNext = (auxIdx + 1) % topo.families.length;
@@ -333,13 +437,20 @@ class MandalaGenerator {
 
     const driftT = t * topo.n * this.paramDriftSpeed;
 
-    const a0 = topo.families[baseIdx](i, driftT);
-    const a1 = topo.families[nextIdx](i, driftT);
-    const b0 = topo.families[auxIdx](i, driftT);
-    const b1 = topo.families[auxNext](i, driftT);
+    const a0p = topo.enforceHop(pIdx, topo.families[baseIdx](pIdx, driftT));
+    const a1p = topo.enforceHop(pIdx, topo.families[nextIdx](pIdx, driftT));
 
-    // We return targets for two lanes; draw code blends the lanes by alpha.
-    return { a0, a1, w, b0, b1, w2 };
+    const b0p = topo.enforceHop(pIdx, topo.families[auxIdx](pIdx, driftT));
+    const b1p = topo.enforceHop(pIdx, topo.families[auxNext](pIdx, driftT));
+
+    return {
+      a0: topo.nodeAtPermIndex(a0p),
+      a1: topo.nodeAtPermIndex(a1p),
+      w,
+      b0: topo.nodeAtPermIndex(b0p),
+      b1: topo.nodeAtPermIndex(b1p),
+      w2
+    };
   }
 
   // -------------------------------------------------------------
@@ -411,8 +522,6 @@ class MandalaGenerator {
       const sinRing = Math.sin(ringRotation);
 
       // Decide symmetry layers.
-      // Sacred: primary only (stable).
-      // Cosmic: primary + secondary (still controlled).
       const symList = (this.style === "cosmic")
         ? [this.primarySymmetry, this.secondarySymmetry]
         : [this.primarySymmetry];
@@ -437,20 +546,18 @@ class MandalaGenerator {
         const layerHue = (layerIdx === 0) ? ringHue : (ringHue + 180) % 360;
         const layerAlpha = (layerIdx === 0) ? alphaBase : alphaBase * 0.40;
 
-        // Precompute symmetry cos/sin once per segment.
         for (let s = 0; s < symmetry; s++) {
           const symAngle = (Math.PI * 2 * s) / symmetry;
           const cosSym = Math.cos(symAngle);
           const sinSym = Math.sin(symAngle);
 
-          // Draw points + edges.
+          // Hot loop: draw points + edges.
           for (let i = 0; i < this.points.length; i++) {
             const bp = baseProj[i];
 
-            // Apply symmetry rotation (around center), then ring rotation (parallax).
+            // Apply symmetry rotation then ring rotation.
             const symX = this.centerX + (bp.x * cosSym - bp.y * sinSym);
             const symY = this.centerY + (bp.x * sinSym + bp.y * cosSym);
-
             const final = this.rotateAroundCenter(symX, symY, cosRing, sinRing);
 
             // Dot size: sacred crisper, cosmic slightly more glow.
@@ -465,33 +572,52 @@ class MandalaGenerator {
             this.ctx.fill();
 
             // --- Edges (Topology Engine) ---
-            // Sacred: stable “rich” structure by drawing TWO stable graphs:
-            //   - base family edges (primary)
-            //   - aux family edges (subtle)
-            // Cosmic: continuous morph by blending two edge-sets with weights.
-            const t = this.time;
-
             if (!this.topo) continue;
+
+            // A deterministic thinning rule prevents dense “blob” graphs in Cosmic
+            // without introducing randomness or changing the constellation.
+            if (this.style === "cosmic") {
+              if ((i + ring + s) % this.topo.cosmicEdgeStride !== 0) continue;
+            }
 
             if (this.style === "sacred") {
               const { a, b } = this.getTopologyTargets(i, 0);
 
-              // Primary edge.
-              this.drawEdge(i, a, baseProj, cosSym, sinSym, cosRing, sinRing, ring, layerHue, layerAlpha, 1.0);
+              // Primary edge (dominant).
+              this.drawEdge(
+                i, a, baseProj, cosSym, sinSym, cosRing, sinRing,
+                ring, layerHue, layerAlpha, 1.0, /*isCosmic*/ false
+              );
 
-              // Secondary edge (softer).
-              this.drawEdge(i, b, baseProj, cosSym, sinSym, cosRing, sinRing, ring, (layerHue + 30) % 360, layerAlpha * 0.35, 0.9);
+              // Secondary edge (supportive).
+              this.drawEdge(
+                i, b, baseProj, cosSym, sinSym, cosRing, sinRing,
+                ring, (layerHue + 30) % 360, layerAlpha * 0.35, 0.9, /*isCosmic*/ false
+              );
             } else {
+              const t = this.time;
               const { a0, a1, w, b0, b1, w2 } = this.getTopologyTargets(i, t);
 
-              // Blend lane A: draw both edge-sets with alpha weighting (no snapping).
-              this.drawEdge(i, a0, baseProj, cosSym, sinSym, cosRing, sinRing, ring, layerHue, layerAlpha * (1 - w), 1.0);
-              this.drawEdge(i, a1, baseProj, cosSym, sinSym, cosRing, sinRing, ring, layerHue, layerAlpha * (w), 1.0);
+              // Blend lane A: draw both edge sets with alpha weighting (no snapping).
+              this.drawEdge(
+                i, a0, baseProj, cosSym, sinSym, cosRing, sinRing,
+                ring, layerHue, layerAlpha * (1 - w), 1.0, /*isCosmic*/ true
+              );
+              this.drawEdge(
+                i, a1, baseProj, cosSym, sinSym, cosRing, sinRing,
+                ring, layerHue, layerAlpha * (w), 1.0, /*isCosmic*/ true
+              );
 
               // Blend lane B (interference): complementary hue, softer.
               const h2 = (layerHue + 150) % 360;
-              this.drawEdge(i, b0, baseProj, cosSym, sinSym, cosRing, sinRing, ring, h2, layerAlpha * 0.25 * (1 - w2), 0.9);
-              this.drawEdge(i, b1, baseProj, cosSym, sinSym, cosRing, sinRing, ring, h2, layerAlpha * 0.25 * (w2), 0.9);
+              this.drawEdge(
+                i, b0, baseProj, cosSym, sinSym, cosRing, sinRing,
+                ring, h2, layerAlpha * 0.22 * (1 - w2), 0.9, /*isCosmic*/ true
+              );
+              this.drawEdge(
+                i, b1, baseProj, cosSym, sinSym, cosRing, sinRing,
+                ring, h2, layerAlpha * 0.22 * (w2), 0.9, /*isCosmic*/ true
+              );
             }
           }
         }
@@ -560,8 +686,12 @@ class MandalaGenerator {
   }
 
   // Draw one quadratic edge between point i and point j, under the current ring/sym transforms.
-  // The control point is gently pulled inward to preserve the “mandala arc” feel.
-  drawEdge(i, j, baseProj, cosSym, sinSym, cosRing, sinRing, ring, hue, alpha, weight) {
+  // Control point is gently pulled inward to preserve the “mandala arc” feel.
+  //
+  // Important: This method is designed to be “safe” in hot loops:
+  // - It guards against duplicate edge draws (j <= i).
+  // - In Cosmic mode it softly suppresses very-short edges to reduce “blob” density.
+  drawEdge(i, j, baseProj, cosSym, sinSym, cosRing, sinRing, ring, hue, alpha, weight, isCosmic) {
     if (j <= i) return;
 
     const bp1 = baseProj[i];
@@ -574,6 +704,21 @@ class MandalaGenerator {
     const x2 = this.centerX + (bp2.x * cosSym - bp2.y * sinSym);
     const y2 = this.centerY + (bp2.x * sinSym + bp2.y * cosSym);
     const p2 = this.rotateAroundCenter(x2, y2, cosRing, sinRing);
+
+    // In Cosmic mode, suppress very short edges (they are the main contributor to “blobs”).
+    if (isCosmic) {
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const d2 = dx * dx + dy * dy;
+
+      // Threshold scales with canvas size so small screens don’t over-prune.
+      const minLen = Math.max(10, Math.floor(this.canvas.width / 28));
+      if (d2 < (minLen * minLen)) return;
+
+      // Fade short-ish edges more than long chords.
+      const fade = Math.min(1, Math.max(0.15, Math.sqrt(d2) / (this.canvas.width * 0.45)));
+      alpha *= fade;
+    }
 
     // Inward pull factor: deeper rings pull a bit more toward the center.
     const pull = (0.85 - ring * 0.03);
@@ -599,7 +744,8 @@ class MandalaGenerator {
       this.rotationAngle += rotationStep;
 
       // Dual-sine breathing.
-      const pulse = 1.0 +
+      const pulse =
+        1.0 +
         Math.sin(this.time) * this.pulseAmplitude +
         Math.sin(this.time * 1.6) * (this.pulseAmplitude * 0.2);
 
@@ -641,7 +787,7 @@ class MandalaGenerator {
       this.ctx.scale(scale, scale);
       this.ctx.translate(-this.centerX, -this.centerY);
 
-      // We reuse drawMandala() so the provenance text collapses with the geometry.
+      // Reuse drawMandala() so provenance text collapses with the geometry.
       this.drawMandala(scale);
 
       this.ctx.restore();
