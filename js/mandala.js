@@ -562,7 +562,7 @@ class MandalaGenerator {
   // Draw one quadratic edge between point i and point j, under the current ring/sym transforms.
   // The control point is gently pulled inward to preserve the “mandala arc” feel.
   drawEdge(i, j, baseProj, cosSym, sinSym, cosRing, sinRing, ring, hue, alpha, weight) {
-    if (j === i) return;
+    if (j <= i) return;
 
     const bp1 = baseProj[i];
     const bp2 = baseProj[j];
