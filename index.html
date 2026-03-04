@@ -1,41 +1,27 @@
 <!DOCTYPE html>
 <!--
   index.html — Intention Keeper (Front End, Stubbed)
-  ==================================================
-  PURPOSE
-  - Single-page shell for the Intention Keeper front end.
-  - This file defines DOM structure + stable element IDs.
-  - All runtime behavior is controlled by js/app.js.
+  =================================================
+  PURPOSE:
+  Single-page shell for the Intention Keeper front end.
 
-  DOM CONTRACT (critical)
-  - app.js queries by ID. If you rename/remove IDs, app.js will break.
-  - The following IDs are treated as public API between HTML ↔ JS:
-    intentionInput, wordCount, wordWarning, analyzeBtn,
-    analysisSection, feedbackMessage, reframedSection, reframedText,
-    acceptReframeBtn, keepOriginalBtn, directGenerateSection, generateDirectBtn,
-    mandalaSection, mandalaWrapper, mandalaCanvas, hashDisplay,
-    timerSection, wheelPicker, hoursWheel, minutesWheel, secondsWheel,
-    startTimerBtn, countdown, countdownDisplay, cancelTimerBtn, stopMeditationBtn,
-    sessionComplete, newSessionBtn,
-    sacredBtn, cosmicBtn, muteBtn,
-    intentionsSection, intentionsList, clearAllBtn.
+  TAB CONTRACT (used by app.js):
+  - #tabSessionBtn / #tabSavedBtn are clickable tab buttons.
+  - #tabSessionPanel and #tabSavedPanel are the two panels we show/hide.
+  - Saved intentions UI exists ONLY inside #tabSavedPanel so it never gets pushed
+    below the mandala flow.
 
-  BACKEND STUB CONTEXT
-  - Saved intentions currently render from the front-end store (localStorage now).
-  - If the user clears browser data, localStorage is wiped. Long-term persistence
-    must come from a backend store (planned contract), which app.js will later call.
-
-  SCRIPT LOAD ORDER
-  - Kept explicit because modules depend on prior globals:
-    hash-encoder → intention-analyzer → mandala → audio → app
+  STUB NOTE (persistence):
+  - Saved intentions are stored locally for now (localStorage).
+  - If the user clears browser data, local storage is erased.
+  - Cloud persistence is stubbed in app.js (CloudIntentionsStore) for future backend.
 -->
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <!-- Mobile scaling matters because the canvas size and wheel UI depend on viewport -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Intention Keeper - Geometric Visualization</title>
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 
 <body>
@@ -46,29 +32,25 @@
       <p class="tagline-sub">A consciousness visualization tool</p>
     </header>
 
+    <!-- TAB BAR -->
+    <nav class="tabs" aria-label="Primary navigation tabs">
+      <button id="tabSessionBtn" class="tab-btn active" type="button" aria-controls="tabSessionPanel" aria-selected="true">
+        Session
+      </button>
+      <button id="tabSavedBtn" class="tab-btn" type="button" aria-controls="tabSavedPanel" aria-selected="false">
+        Saved Intentions
+      </button>
+    </nav>
+
     <main>
+      <!-- ==========================================================
+           SESSION TAB PANEL
+           - This is the full existing session flow.
+           - app.js will show/hide analysis/mandala sections as needed.
+           ========================================================== -->
+      <section id="tabSessionPanel" class="tab-panel active" aria-labelledby="tabSessionBtn">
 
-      <!--
-        NAV TABS (UI shell)
-        - This is purely presentational right now.
-        - We intentionally do NOT rely on these tabs in app.js yet.
-        - Default behavior: Session tab content is visible; Saved Intentions tab content
-          is visible as well unless your CSS hides it. We can wire toggling next.
-        - IDs are provided now so we can hook them later without changing HTML again.
-      -->
-      <div class="tabs" id="mainTabs">
-        <button class="tab-btn active" id="tabSessionBtn" type="button">Session</button>
-        <button class="tab-btn" id="tabSavedBtn" type="button">Saved Intentions</button>
-      </div>
-
-      <!-- =========================================================
-           SESSION TAB
-           - Intention entry + analysis + mandala generation + timer.
-           ========================================================= -->
-      <section id="tabSessionPanel">
-
-        <!-- INPUT SECTION
-             - Word counter + 50-word limit are enforced by app.js -->
+        <!-- INPUT SECTION -->
         <section class="input-section">
           <h2>Enter Your Intention</h2>
           <p class="instruction">
@@ -80,66 +62,49 @@
 
           <div class="word-counter">
             <span id="wordCount">0</span> / 50 words
-            <!-- app.js toggles this warning and disables Analyze -->
-            <span
-              id="wordWarning"
-              style="display:none; color:#e74c3c; font-weight:bold; margin-left:10px;"
-            >⚠️ Exceeds limit</span>
+            <span id="wordWarning" style="display:none; color:#e74c3c; font-weight:bold; margin-left:10px;">
+              ⚠️ Exceeds limit
+            </span>
           </div>
 
-          <button class="primary-btn" id="analyzeBtn" type="button">Analyze Intention</button>
+          <button class="primary-btn" id="analyzeBtn">Analyze Intention</button>
         </section>
 
-        <!-- ANALYSIS SECTION
-             - app.js shows/hides this based on analysis flow -->
+        <!-- ANALYSIS SECTION -->
         <section class="analysis-section" id="analysisSection" style="display:none;">
           <h2>Consciousness Analysis</h2>
-
-          <!-- app.js assigns severity class names to style feedback -->
           <div id="feedbackMessage" class="feedback-message"></div>
 
-          <!-- Reframe panel: app.js toggles this for neutral/unconscious -->
           <div id="reframedSection" class="reframed-intention" style="display:none;">
             <h3>Reframed Intention</h3>
             <p class="reframed-text" id="reframedText"></p>
 
-            <button class="primary-btn" id="acceptReframeBtn" type="button">
-              Accept Reframed Intention
-            </button>
+            <button class="primary-btn" id="acceptReframeBtn">Accept Reframed Intention</button>
 
-            <!-- app.js shows only for neutral intentions -->
-            <button class="secondary-btn" id="keepOriginalBtn" type="button" style="display:none;">
+            <button class="secondary-btn" id="keepOriginalBtn" style="display:none;">
               Keep Original (I Understand)
             </button>
           </div>
 
-          <!-- Direct-generate panel: app.js shows when intention passes -->
           <div id="directGenerateSection" style="display:none;">
-            <button class="primary-btn" id="generateDirectBtn" type="button">Generate Mandala</button>
+            <button class="primary-btn" id="generateDirectBtn">Generate Mandala</button>
           </div>
         </section>
 
-        <!-- MANDALA SECTION
-             - Hidden until generation succeeds.
-             - Contains stable canvas IDs used by mandala.js + app.js -->
+        <!-- MANDALA SECTION -->
         <section class="mandala-section" id="mandalaSection" style="display:none;">
           <h2>Your Geometric Pattern</h2>
           <p class="mandala-subtitle">A unique visualization generated from your intention</p>
 
-          <!-- Wrapper exists so app.js can apply dissolve/fade behavior cleanly -->
           <div id="mandalaWrapper">
             <canvas id="mandalaCanvas" width="600" height="600"></canvas>
           </div>
 
           <div class="mandala-info">
-            <p class="hash-display">
-              Cryptographic Signature:
-              <span id="hashDisplay"></span>
-            </p>
+            <p class="hash-display">Cryptographic Signature: <span id="hashDisplay"></span></p>
           </div>
 
-          <!-- MEDITATION TIMER
-               - Wheel structure is relied on by buildWheel() in app.js -->
+          <!-- TIMER SECTION -->
           <div class="timer-section" id="timerSection">
             <p class="timer-label">Set Meditation Duration</p>
 
@@ -164,73 +129,55 @@
               </div>
             </div>
 
-            <button class="primary-btn" id="startTimerBtn" type="button">Begin Meditation</button>
+            <button class="primary-btn" id="startTimerBtn">Begin Meditation</button>
 
-            <!-- Countdown row
-                 - stopMeditationBtn MUST exist even when hidden -->
             <div class="countdown" id="countdown" style="display:none;">
               <span id="countdownDisplay">00:00:00</span>
-              <button class="secondary-btn" id="cancelTimerBtn" type="button">Cancel</button>
-              <button class="secondary-btn" id="stopMeditationBtn" type="button" style="display:none;">
-                Stop Meditation
-              </button>
+              <button class="secondary-btn" id="cancelTimerBtn">Cancel</button>
+              <button class="secondary-btn" id="stopMeditationBtn" style="display:none;">Stop Meditation</button>
             </div>
           </div>
 
-          <!-- SESSION COMPLETE
-               - app.js reveals this after dissolve + audio fade -->
+          <!-- SESSION COMPLETE -->
           <div class="session-complete" id="sessionComplete" style="display:none;">
-            <p>✨ Your meditation session is complete.</p>
+            <p>~O Your meditation session is complete</p>
             <p class="session-subtitle">Your intention has been set.</p>
-            <button class="primary-btn" id="newSessionBtn" type="button">Begin New Session</button>
+            <button class="primary-btn" id="newSessionBtn">Begin New Session</button>
           </div>
 
-          <!-- CONTROLS
-               - app.js toggles active classes on sacred/cosmic buttons
-               - muteBtn label is updated dynamically -->
+          <!-- CONTROLS -->
           <div class="controls">
             <div class="style-toggle">
-              <button class="style-btn active" id="sacredBtn" type="button">⚓ Sacred</button>
-              <button class="style-btn" id="cosmicBtn" type="button">✦ Cosmic</button>
+              <button class="style-btn active" id="sacredBtn">⚓ Sacred</button>
+              <button class="style-btn" id="cosmicBtn">✦ Cosmic</button>
             </div>
 
-            <button class="secondary-btn" id="muteBtn" type="button">
-              🔊 Mute Schumann Resonance
-            </button>
+            <button class="secondary-btn" id="muteBtn">🔊 Mute Schumann Resonance</button>
           </div>
         </section>
-
       </section>
 
-      <!-- =========================================================
-           SAVED INTENTIONS TAB
-           - This is the same section app.js already knows how to render.
-           - Long-term persistence requires backend: app.js contains stubs.
-           ========================================================= -->
-      <section id="tabSavedPanel">
-
-        <!-- MY INTENTIONS SECTION
-             - app.js shows/hides based on whether any entries exist -->
-        <section class="intentions-section" id="intentionsSection" style="display:none;">
+      <!-- ==========================================================
+           SAVED INTENTIONS TAB PANEL
+           - Intentionally separate so it never shifts below mandala UI.
+           ========================================================== -->
+      <section id="tabSavedPanel" class="tab-panel" aria-labelledby="tabSavedBtn">
+        <section class="intentions-section" id="intentionsSection">
           <h2>My Intentions</h2>
-          <p class="instruction">Click any intention to regenerate its mandala.</p>
+          <p class="instruction">Click any intention to regenerate its mandala in the Session tab.</p>
 
-          <!-- Populated by app.js -->
           <div id="intentionsList"></div>
 
-          <button class="secondary-btn" id="clearAllBtn" type="button" style="margin-top:15px;">
+          <button class="secondary-btn" id="clearAllBtn" style="margin-top:15px;">
             Clear All Intentions
           </button>
 
-          <!-- Stub clarity for future contract -->
-          <p class="instruction" style="margin-top:10px; opacity:0.85;">
-            Note: This is stored locally in the browser right now. If you clear browser data,
-            this list will be erased until the cloud backend is connected.
+          <p class="note" style="margin-top:10px; opacity:0.8;">
+            Note: Stored locally in the browser right now. If you clear browser data, these entries disappear
+            until the cloud backend is connected.
           </p>
         </section>
-
       </section>
-
     </main>
 
     <footer>
@@ -238,7 +185,7 @@
     </footer>
   </div>
 
-  <!-- Load order is intentional: later scripts depend on globals defined earlier -->
+  <!-- Script load order is critical -->
   <script src="js/hash-encoder.js"></script>
   <script src="js/intention-analyzer.js"></script>
   <script src="js/mandala.js"></script>
