@@ -30,7 +30,24 @@
 //   spiralDissolve() + audio fade trigger together (8 seconds) →
 //   session complete screen appears →
 //   Begin New Session reloads page for clean state
+//
+// NEW: SAVED INTENTIONS TAB + CLOUD DURABILITY STUB
+// Local browser storage (localStorage / IndexedDB) can be wiped if the user
+// clears "browsing data/history". If the user must always be able to recover
+// intentions even after clearing browsing data, this REQUIRES a backend tied
+// to an account.
+//
+// We implement a two-backend repository now:
+//   - LocalIntentionsStore  (works today; NOT durable if browser data cleared)
+//   - CloudIntentionsStore  (STUB: placeholders for future API/DB integration)
+//
+// CONTRACT MARKERS:
+// Any code path labeled "BACKEND CONTRACT (STUB)" is a future API contract
+// that must be implemented server-side and wired client-side.
 // =============================================================
+
+
+/* global MandalaGenerator, IntentionAudioEngine, IntentionAnalyzer, generateHash, hexToNumbers, hashToSphericalCoords */
 
 
 // ─────────────────────────────────────────────
@@ -60,6 +77,196 @@ let selectedSeconds = 0;
 
 
 // ─────────────────────────────────────────────
+// PERSISTENCE LAYER (LOCAL + CLOUD STUB)
+// ─────────────────────────────────────────────
+//
+// Why this exists:
+// - We want Saved Intentions to work today without backend.
+// - We ALSO want a clean place to add backend sync later.
+//
+// IMPORTANT:
+// - Local storage is NOT durable if user clears browsing data.
+// - CloudIntentionsStore is where durability will come from,
+//   once backend + auth exists.
+//
+
+class LocalIntentionsStore {
+    constructor(storageKey) {
+        this.key = storageKey;
+    }
+
+    // Returns [{ text, hash, timestamp }, ...]
+    async list() {
+        try {
+            const raw = localStorage.getItem(this.key);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) {
+            console.warn('LocalIntentionsStore.list failed:', e);
+            return [];
+        }
+    }
+
+    // Prepend newest; optionally skip duplicates (same as existing behavior).
+    async addUnique(intentionText, hash) {
+        const intentions = await this.list();
+
+        // Avoid consecutive duplicates (same as your prior logic).
+        if (intentions.length > 0 && intentions[0].text === intentionText) {
+            return { skipped: true };
+        }
+
+        intentions.unshift({
+            text: intentionText,
+            hash: hash,
+            timestamp: new Date().toISOString()
+        });
+
+        try {
+            localStorage.setItem(this.key, JSON.stringify(intentions));
+        } catch (e) {
+            console.warn('LocalIntentionsStore.addUnique failed:', e);
+        }
+
+        return { skipped: false };
+    }
+
+    async removeAt(index) {
+        const intentions = await this.list();
+        intentions.splice(index, 1);
+        try {
+            localStorage.setItem(this.key, JSON.stringify(intentions));
+        } catch (e) {
+            console.warn('LocalIntentionsStore.removeAt failed:', e);
+        }
+    }
+
+    async clear() {
+        localStorage.removeItem(this.key);
+    }
+}
+
+class CloudIntentionsStore {
+    // BACKEND CONTRACT (STUB)
+    // This store is the durability layer: intentions survive local data deletion.
+    //
+    // Suggested API (future):
+    //   GET    /api/intentions              -> list
+    //   POST   /api/intentions              -> create {text, hash, timestamp}
+    //   DELETE /api/intentions/:id OR body  -> delete
+    //
+    // Suggested auth (future):
+    //   token-based auth; intentions belong to authenticated user.
+    //
+    // Current behavior:
+    //   Stubbed to no-op so front end can ship without backend.
+
+    async list() {
+        // TODO: return fetch("/api/intentions").then(r => r.json())
+        return [];
+    }
+
+    async addUnique(_intentionText, _hash) {
+        // TODO: POST to backend
+        return { skipped: false };
+    }
+
+    async removeAt(_indexOrId) {
+        // TODO: DELETE in backend
+        return;
+    }
+
+    async clear() {
+        // TODO: backend "clear all" (optional)
+        return;
+    }
+}
+
+class IntentionsRepository {
+    constructor({ localStore, cloudStore, enableCloudSync }) {
+        this.local = localStore;
+        this.cloud = cloudStore;
+        this.enableCloudSync = !!enableCloudSync;
+    }
+
+    async list() {
+        // Default: local only.
+        const localItems = await this.local.list();
+        if (!this.enableCloudSync) return localItems;
+
+        // When enabled: merge cloud+local.
+        // For now: cloud wins if duplicates exist (by hash+timestamp heuristic later).
+        // This merge strategy will be refined once backend returns stable IDs.
+        const cloudItems = await this.cloud.list();
+
+        // Merge by (text+hash+timestamp) as a temporary identity.
+        const keyOf = (x) => `${x.hash}::${x.timestamp}::${x.text}`;
+        const seen = new Set();
+        const merged = [];
+
+        for (const it of cloudItems) {
+            const k = keyOf(it);
+            if (!seen.has(k)) { seen.add(k); merged.push(it); }
+        }
+        for (const it of localItems) {
+            const k = keyOf(it);
+            if (!seen.has(k)) { seen.add(k); merged.push(it); }
+        }
+
+        return merged;
+    }
+
+    async addUnique(intentionText, hash) {
+        const result = await this.local.addUnique(intentionText, hash);
+
+        if (this.enableCloudSync && !result.skipped) {
+            // Best-effort; UI should not break if cloud fails.
+            try {
+                await this.cloud.addUnique(intentionText, hash);
+            } catch (e) {
+                console.warn('CloudIntentionsStore.addUnique failed (stub/offline):', e);
+            }
+        }
+
+        return result;
+    }
+
+    async removeAt(index) {
+        await this.local.removeAt(index);
+
+        if (this.enableCloudSync) {
+            // BACKEND CONTRACT (STUB): we need a stable identifier for deletes.
+            // Index-based deletes are not safe once cloud ordering differs.
+            // When backend exists, intention records must have an ID.
+            try {
+                await this.cloud.removeAt(index);
+            } catch (e) {
+                console.warn('CloudIntentionsStore.removeAt failed (stub/offline):', e);
+            }
+        }
+    }
+
+    async clear() {
+        await this.local.clear();
+        if (this.enableCloudSync) {
+            try {
+                await this.cloud.clear();
+            } catch (e) {
+                console.warn('CloudIntentionsStore.clear failed (stub/offline):', e);
+            }
+        }
+    }
+}
+
+// Repository instance (cloud sync OFF until backend + auth exist)
+const intentionsRepo = new IntentionsRepository({
+    localStore: new LocalIntentionsStore(STORAGE_KEY),
+    cloudStore: new CloudIntentionsStore(),
+    enableCloudSync: false
+});
+
+
+// ─────────────────────────────────────────────
 // INITIALIZATION
 // ─────────────────────────────────────────────
 
@@ -79,14 +286,62 @@ document.addEventListener('DOMContentLoaded', function() {
     const clearAllBtn       = document.getElementById('clearAllBtn');
     const startTimerBtn     = document.getElementById('startTimerBtn');
 
+    // OPTIONAL (new tab UI). If these elements don't exist yet, app still works.
+    const tabCreateBtn      = document.getElementById('tabCreateBtn');
+    const tabSavedBtn       = document.getElementById('tabSavedBtn');
+    const createPanel       = document.getElementById('createPanel');
+    const savedPanel        = document.getElementById('savedIntentionsPanel');
+    const saveIntentionBtn  = document.getElementById('saveIntentionBtn');
+
     mandalaGen  = new MandalaGenerator(canvas);
     audioEngine = new IntentionAudioEngine();
 
     // Build all three scroll wheel pickers and render saved intentions
     buildWheel('hoursWheel',   0,  2, selectedHours,   (val) => { selectedHours   = val; });
-    buildWheel('minutesWheel', 0, 59, selectedMinutes,  (val) => { selectedMinutes = val; });
-    buildWheel('secondsWheel', 0, 59, selectedSeconds,  (val) => { selectedSeconds = val; });
+    buildWheel('minutesWheel', 0, 59, selectedMinutes, (val) => { selectedMinutes = val; });
+    buildWheel('secondsWheel', 0, 59, selectedSeconds, (val) => { selectedSeconds = val; });
+
+    // Render the list in the existing "My Intentions" section (baseline behavior).
     renderIntentionsList();
+
+    // If tab UI exists, wire it.
+    if (tabCreateBtn && tabSavedBtn && createPanel && savedPanel) {
+        const showTab = (which) => {
+            const isCreate = which === 'create';
+            createPanel.style.display = isCreate ? 'block' : 'none';
+            savedPanel.style.display  = isCreate ? 'none' : 'block';
+            tabCreateBtn.setAttribute('aria-selected', isCreate ? 'true' : 'false');
+            tabSavedBtn.setAttribute('aria-selected', isCreate ? 'false' : 'true');
+
+            // When entering Saved tab, ensure list is fresh.
+            if (!isCreate) renderIntentionsList();
+        };
+
+        tabCreateBtn.addEventListener('click', () => showTab('create'));
+        tabSavedBtn.addEventListener('click', () => showTab('saved'));
+
+        // Default to Create tab.
+        showTab('create');
+    }
+
+    // Optional Save button: saves current input without requiring regeneration.
+    // This is additive; the baseline already saves after generateMandala().
+    if (saveIntentionBtn && intentionInput) {
+        saveIntentionBtn.addEventListener('click', async function() {
+            const text = intentionInput.value.trim();
+            if (!text) { alert('Please enter an intention first.'); return; }
+
+            // If we have a currentHash for the same text, reuse it; else generate hash only.
+            // This keeps "saved intentions" consistent with MERIDIAN-HASH identity.
+            let hash = currentHash;
+            if (!hash || currentIntention !== text) {
+                // BACKEND CONTRACT (STUB): If hashing becomes server-only later, replace this.
+                hash = await generateHash(text);
+            }
+
+            await saveIntention(text, hash);
+        });
+    }
 
 
     // ── WORD COUNTER ──────────────────────────────────────────
@@ -219,9 +474,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
     // ── CLEAR ALL INTENTIONS ──────────────────────────────────
-    clearAllBtn.addEventListener('click', function() {
+    clearAllBtn.addEventListener('click', async function() {
         if (confirm('Are you sure you want to delete all saved intentions? This cannot be undone.')) {
-            localStorage.removeItem(STORAGE_KEY);
+            await intentionsRepo.clear();
             renderIntentionsList();
         }
     });
@@ -343,44 +598,28 @@ function buildWheel(containerId, min, max, defaultValue, onChange) {
 // ─────────────────────────────────────────────
 // INTENTION STORAGE
 // ─────────────────────────────────────────────
+//
+// STUB (BACKEND CONTRACT):
+// If you need intentions to survive browser data deletion, this must sync to backend.
+// The repository is already in place; enableCloudSync + implement CloudIntentionsStore.
+//
 
 // Saves intention text, hash, and timestamp to localStorage.
 // Skips duplicate consecutive entries to avoid redundant storage.
 // STUB: will POST to backend API when server is ready.
-function saveIntention(intentionText, hash) {
-    const intentions = loadIntentions();
-    // Skip if the most recent entry is identical to avoid duplicates
-    if (intentions.length > 0 && intentions[0].text === intentionText) return;
-
-    intentions.unshift({
-        text:      intentionText,
-        hash:      hash,
-        timestamp: new Date().toISOString()
-    });
-
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(intentions));
-    } catch(e) {
-        console.warn('Could not save intention to localStorage:', e);
-    }
+async function saveIntention(intentionText, hash) {
+    // Repository maintains the same behavior as your baseline saveIntention().
+    await intentionsRepo.addUnique(intentionText, hash);
     renderIntentionsList();
 }
 
-function loadIntentions() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : [];
-    } catch(e) { return []; }
+async function loadIntentions() {
+    // NOTE: This stays async because later it may call backend.
+    return await intentionsRepo.list();
 }
 
-function deleteIntention(index) {
-    const intentions = loadIntentions();
-    intentions.splice(index, 1);
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(intentions));
-    } catch(e) {
-        console.warn('Could not update localStorage:', e);
-    }
+async function deleteIntention(index) {
+    await intentionsRepo.removeAt(index);
     renderIntentionsList();
 }
 
@@ -388,17 +627,14 @@ function deleteIntention(index) {
 // ─────────────────────────────────────────────
 // SESSION DATA STORAGE (STUB FOR BACKEND)
 // ─────────────────────────────────────────────
-
-// Saves a full session record to localStorage.
-// Fields captured:
-//   text      — intention text
-//   hash      — MERIDIAN-HASH (SHA-256 hex)
-//   timestamp — when the mandala was generated
-//   duration  — total seconds the user selected on the wheels
-//   style     — 'sacred' or 'cosmic' at time of session end
-//   completed — true = timer ran to zero, false = user stopped early
 //
-// STUB: replace localStorage.setItem with a POST to the backend API.
+// STUB (BACKEND CONTRACT):
+// Replace localStorage.setItem with POST to backend sessions endpoint.
+// Suggested future endpoint:
+//   POST /api/sessions  -> sessionRecord
+//   GET  /api/sessions  -> history
+//
+
 function saveSessionData(completed) {
     if (!currentIntention || !currentHash) return; // no session to save
 
@@ -425,13 +661,22 @@ function saveSessionData(completed) {
 // ─────────────────────────────────────────────
 // INTENTIONS LIST RENDER
 // ─────────────────────────────────────────────
+//
+// This function renders to the EXISTING baseline DOM:
+//  - intentionsSection
+//  - intentionsList
+// It also supports (optionally) rendering into a new tab panel if you
+// choose to reuse the same IDs inside that panel.
+//
+// If you later change IDs for the Saved tab, this is the one place to update.
+//
 
-// Rebuilds the My Intentions section from localStorage.
-// Shows the section if entries exist, hides it if empty.
-function renderIntentionsList() {
-    const intentions = loadIntentions();
+async function renderIntentionsList() {
+    const intentions = await loadIntentions();
     const section    = document.getElementById('intentionsSection');
     const list       = document.getElementById('intentionsList');
+
+    if (!section || !list) return;
 
     if (intentions.length === 0) { section.style.display = 'none'; return; }
 
@@ -475,11 +720,12 @@ function renderIntentionsList() {
 // ─────────────────────────────────────────────
 // CONSCIOUSNESS ANALYSIS
 // ─────────────────────────────────────────────
+//
+// STUB (BACKEND CONTRACT):
+// Replace IntentionAnalyzer.analyze() + .reframe() with a fetch() to backend.
+// The response shape should match analyze() output: severity, feedback, reframe fields.
+//
 
-// Runs the local IntentionAnalyzer and updates the UI based on severity.
-// STUB: replace IntentionAnalyzer.analyze() with a fetch() to the backend
-// DeepSeek API endpoint. The response shape should match the object
-// currently returned by analyze() — severity, feedback, reframe fields.
 async function analyzeIntention(intention) {
     currentIntention = intention;
 
@@ -522,9 +768,12 @@ async function analyzeIntention(intention) {
 // ─────────────────────────────────────────────
 // MANDALA GENERATION
 // ─────────────────────────────────────────────
+//
+// STUB (BACKEND CONTRACT POSSIBILITY):
+// If hashing ever becomes server-only, replace generateHash() usage.
+// For now, hashing remains local and deterministic.
+//
 
-// Hashes the intention, draws the mandala, starts audio, and saves the intention.
-// Resets timer and dissolve state so re-generating always starts clean.
 async function generateMandala(intentionText) {
     const mandalaSection  = document.getElementById('mandalaSection');
     const hashDisplay     = document.getElementById('hashDisplay');
@@ -550,13 +799,14 @@ async function generateMandala(intentionText) {
     const hash = await mandalaGen.generate(intentionText);
     currentHash        = hash;
     currentHashNumbers = mandalaGen.hashNumbers;
+    currentIntention   = intentionText;
 
     // Display truncated hash below canvas — full hash is drawn on canvas itself
     hashDisplay.textContent = hash.substring(0, 16) + '...';
     mandalaGen.startBreathing();
 
     // Save intention record after successful generation
-    saveIntention(intentionText, hash);
+    await saveIntention(intentionText, hash);
 
     if (audioEngine) {
         audioEngine.start(currentHashNumbers);
@@ -569,8 +819,6 @@ async function generateMandala(intentionText) {
 // MEDITATION TIMER
 // ─────────────────────────────────────────────
 
-// Starts the countdown from the total seconds derived from the scroll wheels.
-// Hides the wheel picker and shows the live countdown display.
 function startTimer(totalSeconds) {
     cancelTimer(); // clear any existing interval first
     timerSeconds = totalSeconds;
@@ -602,7 +850,6 @@ function startTimer(totalSeconds) {
     }, 1000);
 }
 
-// Formats total seconds into HH:MM:SS for the countdown display.
 function updateCountdownDisplay(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -611,9 +858,6 @@ function updateCountdownDisplay(seconds) {
         `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// Cancels a running timer and restores the wheel picker UI.
-// Does NOT trigger dissolve — used only for the Cancel button
-// which aborts before meditation begins.
 function cancelTimer() {
     if (timerInterval) {
         clearInterval(timerInterval);
@@ -634,11 +878,6 @@ function cancelTimer() {
     if (stopBtn)       stopBtn.style.display       = 'none';
 }
 
-// Ends the session — triggered by timer completion OR Stop Meditation button.
-// completed: true  = timer ran to zero
-// completed: false = user stopped early
-// Both paths trigger the same spiral dissolve and audio fade.
-// The only difference is the completed flag already saved by the caller.
 function endSession(completed) {
     if (timerInterval) {
         clearInterval(timerInterval);
