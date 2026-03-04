@@ -738,21 +738,45 @@ class MandalaGenerator {
   // ANIMATION LOOP
   // -------------------------------------------------------------
   startBreathing() {
-    const rotationStep = -0.005; // negative = counterclockwise
-    const animate = () => {
-      this.time += this.pulseSpeed;
-      this.rotationAngle += rotationStep;
+    // Cap to 60 FPS to reduce paint pressure while keeping motion time-based.
+    const FPS_CAP = 60;
+    const FRAME_MS = 1000 / FPS_CAP;
 
-      // Dual-sine breathing.
-      const pulse =
-        1.0 +
-        Math.sin(this.time) * this.pulseAmplitude +
-        Math.sin(this.time * 1.6) * (this.pulseAmplitude * 0.2);
+    // Rotation is expressed per-second so it remains consistent if the cap changes.
+    const rotationPerSecond = -0.30; // radians/sec, negative = counterclockwise
 
-      this.drawMandala(pulse);
+    let last = performance.now();
+    let acc = 0;
+
+    const animate = (now) => {
+      const dtMs = now - last;
+      last = now;
+
+      // Clamp large gaps (tab switch / breakpoint) so we don't "fast-forward" violently.
+      acc += Math.min(dtMs, 100);
+
+      // Only render when we've met the frame budget.
+      if (acc >= FRAME_MS) {
+        // Consume exactly one fixed step for stable feel.
+        acc -= FRAME_MS;
+        const dt = FRAME_MS / 1000; // seconds
+
+        // pulseSpeed was historically "per RAF tick"; scaling by ~60 preserves the tuned feel.
+        this.time += this.pulseSpeed * (dt * 60);
+        this.rotationAngle += rotationPerSecond * dt;
+
+        const pulse =
+          1.0 +
+          Math.sin(this.time) * this.pulseAmplitude +
+          Math.sin(this.time * 1.6) * (this.pulseAmplitude * 0.2);
+
+        this.drawMandala(pulse);
+      }
+
       this.animationFrame = requestAnimationFrame(animate);
     };
-    animate();
+
+    this.animationFrame = requestAnimationFrame(animate);
   }
 
   stopBreathing() {
