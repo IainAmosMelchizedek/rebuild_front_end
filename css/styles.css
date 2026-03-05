@@ -778,3 +778,36 @@ footer {
     color: #f39c12;
     box-shadow: 0 0 12px rgba(243, 156, 18, 0.3);
 }
+
+/* =========================================================
+   Tabs (Session / Saved Intentions)
+   ========================================================= */
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin: 18px 0 10px;
+}
+
+.tab-btn {
+  cursor: pointer;
+  border: 1px solid rgba(243, 156, 18, 0.55);
+  background: rgba(0, 0, 0, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.tab-btn.active {
+  background: rgba(243, 156, 18, 0.20);
+  border-color: rgba(243, 156, 18, 0.95);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
